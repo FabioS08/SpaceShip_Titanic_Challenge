@@ -6,11 +6,38 @@ import kagglehub
 
 class SpaceShipDataset:
 
-    def __init__(self, dir: str = './'):
+    '''
+    Class to load and preprocess the SpaceShip Titanic Dataset.
+
+    Parameters
+    ----------
+     dir:str
+      The directory containing the dataset
+
+     extended_features:bool
+      Whether to create an extended version of the features (e.g. cabin splitted in multiple features)
+
+    Attributes
+    ----------
+     dir:str
+      The directory containing the dataset
+
+     train:pd.DataFrame
+      The training dataset
+     
+     test:pd.DataFrame
+      The test dataset
+
+    '''
+
+    def __init__(self, dir: str = './', extended_features: bool = True):
 
         self.dir = Path(dir)
         download_data_required = not self._check_dataset_existence()
         self.load_data(download_data_required)
+
+        if extended_features:
+            self.preprocess_dataset()
 
 
     def _check_dataset_existence(self) -> bool:
@@ -61,6 +88,33 @@ class SpaceShipDataset:
         self.test = pd.read_csv(self.dir / 'test.csv')  
 
 
+    @staticmethod
+    def _preprocess_split_data(df: pd.DataFrame) -> pd.DataFrame:
+
+        # Decompose Cabin
+        df[["Cabin_Deck", "Cabin_Num", "Cabin_Side"]] = df["Cabin"].str.split("/", expand = True)
+        df["Cabin_Num"] = pd.to_numeric(df["Cabin_Num"], errors="coerce")
+
+        # Extract Group Size from PassengerId
+        df["Group_Id"] = df["PassengerId"].apply(lambda x: x.split("_")[0])
+        group_sizes = df["Group_Id"].value_counts()
+        df["Group_Size"] = df["Group_Id"].map(group_sizes)
+        df["Is_Solo"] = df["Group_Size"] == 1
+
+        return df
+
+
+    def preprocess_dataset(self) -> None:
+
+        '''
+        It preprocesses the dataset to split the features that contains multiple information, such as 
+        cabin and passengerId.
+        '''
+
+        self.train = self._preprocess_split_data(self.train)
+        self.test = self._preprocess_split_data(self.test)
+
+
     def _format_features(self) -> tuple[str, str]:
         
         train_cols = ", ".join(self.train.columns)
@@ -71,7 +125,7 @@ class SpaceShipDataset:
     
     def print_stats(self):
 
-        width = 160
+        width = 230
         train_cols, test_cols = self._format_features()
 
         text = dedent(f"""
