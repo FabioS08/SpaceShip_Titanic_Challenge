@@ -93,10 +93,10 @@ class SpaceShipDataset:
 
         # Decompose Cabin
         df[["Cabin_Deck", "Cabin_Num", "Cabin_Side"]] = df["Cabin"].str.split("/", expand = True)
-        df["Cabin_Num"] = pd.to_numeric(df["Cabin_Num"], errors="coerce")
+        df["Cabin_Num"] = pd.to_numeric(df["Cabin_Num"], errors = "coerce").astype("Int64")
 
         # Extract Group Size from PassengerId
-        df["Group_Id"] = df["PassengerId"].apply(lambda x: x.split("_")[0])
+        df["Group_Id"] = df["PassengerId"].apply(lambda x: int(x.split("_")[0]))
         group_sizes = df["Group_Id"].value_counts()
         df["Group_Size"] = df["Group_Id"].map(group_sizes)
         df["Is_Solo"] = df["Group_Size"] == 1
