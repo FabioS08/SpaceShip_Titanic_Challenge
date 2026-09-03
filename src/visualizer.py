@@ -819,3 +819,239 @@ class DatasetVisualizer:
 
         # Render interactive Plotly 3D scatter plot
         self._plot_3d_scatter(coords = coords, y = y, dim_labels = dim_labels, title = title, width = width, height = height, alpha = alpha, s = s)
+
+
+    def _plot_planetary_deck_composition(self, ax: plt.Axes, df: pd.DataFrame) -> None:
+
+        '''
+        It plots an annotated heatmap showing the percentage of each deck occupied by each HomePlanet.
+
+        Parameters
+        ----------
+         ax:plt.Axes
+          The matplotlib Axes on which to render the plot.
+
+         df:pd.DataFrame
+          The dataframe containing HomePlanet and Cabin_Deck features.
+
+        Returns
+        -------
+         None
+        '''
+
+        if "Cabin_Deck" in df.columns:
+
+            deck_ct = pd.crosstab(df["HomePlanet"], df["Cabin_Deck"], normalize = "columns")
+            existing_decks = [d for d in self.DECK_ORDER if d in deck_ct.columns]
+            deck_ct = deck_ct.reindex(columns = existing_decks).fillna(0) * 100
+
+            sns.heatmap(deck_ct, annot = True, fmt = ".1f", cmap = "Blues", cbar_kws = {"label": "% of Deck"}, ax = ax, linewidths = 0.5)
+            ax.set_title("1. Deck Composition by HomePlanet (% of Deck)")
+            ax.set_xlabel("Cabin Deck (Top / Luxury -> Lower / Economy)")
+            ax.set_ylabel("HomePlanet")
+
+        else:
+            ax.text(0.5, 0.5, "Cabin_Deck not found", ha = "center", va = "center")
+
+
+    def _plot_planetary_amenity_expenditure(self, ax: plt.Axes, df: pd.DataFrame, palette: dict[str, str]) -> None:
+
+        '''
+        It plots a grouped bar chart showing average expenditure per amenity by HomePlanet.
+
+        Parameters
+        ----------
+         ax:plt.Axes
+          The matplotlib Axes on which to render the plot.
+
+         df:pd.DataFrame
+          The dataframe containing HomePlanet and amenity spending columns.
+
+         palette:dict[str, str]
+          Color mapping dictionary for HomePlanet categories.
+
+        Returns
+        -------
+         None
+        '''
+
+        amenity_means = df.groupby("HomePlanet")[self.SPENDING_COLS].mean().reset_index()
+        melted_amenities = amenity_means.melt(id_vars = "HomePlanet", var_name = "Amenity", value_name = "Average_Spend")
+
+        sns.barplot(data = melted_amenities, x = "Amenity", y = "Average_Spend", hue = "HomePlanet", palette = palette, ax = ax)
+        ax.set_title("2. Average Amenity Expenditure by HomePlanet")
+        ax.set_xlabel("Amenity")
+        ax.set_ylabel("Average Amount ($)")
+        self._add_bar_labels(ax, fmt = "$%.0f", padding = 3, fontsize = 8)
+        ax.legend(title = "HomePlanet", loc = "upper right")
+
+
+    def _plot_planetary_total_spend_and_vip(self, ax: plt.Axes, df: pd.DataFrame, palette: dict[str, str]) -> None:
+
+        '''
+        It plots mean total spending per HomePlanet with overlaid VIP rate percentage annotations.
+
+        Parameters
+        ----------
+         ax:plt.Axes
+          The matplotlib Axes on which to render the plot.
+
+         df:pd.DataFrame
+          The dataframe containing HomePlanet, Total_Spending, and VIP features.
+
+         palette:dict[str, str]
+          Color mapping dictionary for HomePlanet categories.
+
+        Returns
+        -------
+         None
+        '''
+
+        total_spend_df = df.groupby("HomePlanet")["Total_Spending"].mean().reset_index()
+        sns.barplot(data = total_spend_df, x = "HomePlanet", y = "Total_Spending", hue = "HomePlanet", palette = palette, legend = False, ax = ax)
+        ax.set_title("3. Mean Total Spend & VIP Share by HomePlanet")
+        ax.set_xlabel("HomePlanet")
+        ax.set_ylabel("Mean Total Expenditure ($)")
+        self._add_bar_labels(ax, fmt = "$%.0f", padding = 3, fontsize = 10)
+
+        # Annotate VIP rates inside/above each bar
+        vip_rates = df.groupby("HomePlanet")["VIP"].apply(lambda s: (s == True).mean() * 100).to_dict()
+        for i, planet in enumerate(total_spend_df["HomePlanet"]):
+
+            rate = vip_rates.get(planet, 0.0)
+            spend = total_spend_df.loc[total_spend_df["HomePlanet"] == planet, "Total_Spending"].values[0]
+            ax.text(i, spend * 0.5, f"VIP Rate:\n{rate:.1f}%", ha = "center", va = "center", color = "white", fontweight = "bold", fontsize = 9,
+                    bbox = dict(boxstyle = "round,pad=0.3", facecolor = "black", alpha = 0.45))
+
+
+    def _plot_planetary_destination_distribution(self, ax: plt.Axes, df: pd.DataFrame, palette: dict[str, str]) -> None:
+
+        '''
+        It plots the destination percentage breakdown for each HomePlanet.
+
+        Parameters
+        ----------
+         ax:plt.Axes
+          The matplotlib Axes on which to render the plot.
+
+         df:pd.DataFrame
+          The dataframe containing HomePlanet and Destination features.
+
+         palette:dict[str, str]
+          Color mapping dictionary for HomePlanet categories.
+
+        Returns
+        -------
+         None
+        '''
+
+        if "Destination" in df.columns:
+
+            dest_ct = pd.crosstab(df["HomePlanet"], df["Destination"], normalize = "index").reset_index()
+            melted_dest = dest_ct.melt(id_vars = "HomePlanet", var_name = "Destination", value_name = "Proportion")
+            melted_dest["Percentage"] = melted_dest["Proportion"] * 100
+
+            sns.barplot(data = melted_dest, x = "Destination", y = "Percentage", hue = "HomePlanet", palette = palette, ax = ax)
+            ax.set_title("4. Destination Distribution by HomePlanet (%)")
+            ax.set_xlabel("Destination")
+            ax.set_ylabel("Share of Passengers (%)")
+            self._add_bar_labels(ax, fmt = "%.1f%%", padding = 3, fontsize = 8)
+            ax.legend(title = "HomePlanet", loc = "upper right")
+
+        else:
+            ax.text(0.5, 0.5, "Destination not found", ha = "center", va = "center")
+
+
+    def visualize_homeplanet_profiles(self, figsize: tuple[float, float] = (16, 13), h_pad: float = 4.5) -> None:
+
+        '''
+        It generates a 4-panel dashboard visualizing the distinct profiles of each HomePlanet:
+
+            1. Deck Composition (% of each Deck occupied by each HomePlanet)
+            2. Average Amenity Expenditure by HomePlanet
+            3. Mean Total Spending & VIP Share by HomePlanet
+            4. Destination Distribution by HomePlanet (%)
+
+        Parameters
+        ----------
+         figsize:tuple[float, float]
+          Size of the 4-panel figure [Default = (16, 13)].
+
+         h_pad:float
+          Padding (height distance) between subplot rows [Default = 4.5].
+
+        Returns
+        -------
+         None
+        '''
+
+        temp_df, _ = self._prepare_spending_data()
+        valid_df = temp_df.dropna(subset = ["HomePlanet"]).copy()
+
+        fig, axes = plt.subplots(2, 2, figsize = figsize)
+        planet_palette = {"Earth": "#3498db", "Europa": "#9b59b6", "Mars": "#e67e22"}
+
+        self._plot_planetary_deck_composition(ax = axes[0, 0], df = valid_df)
+        self._plot_planetary_amenity_expenditure(ax = axes[0, 1], df = valid_df, palette = planet_palette)
+        self._plot_planetary_total_spend_and_vip(ax = axes[1, 0], df = valid_df, palette = planet_palette)
+        self._plot_planetary_destination_distribution(ax = axes[1, 1], df = valid_df, palette = planet_palette)
+
+        plt.tight_layout(h_pad = h_pad)
+        plt.show()
+
+
+    def visualize_planetary_deck_distribution(self, normalize: str = "columns", figsize: tuple[float, float] = (12, 6)) -> None:
+
+        '''
+        It generates an annotated heatmap showing the spatial distribution between HomePlanet and Cabin Decks.
+
+        Parameters
+        ----------
+         normalize:str
+          Normalization mode:
+            - 'columns': shows deck composition (% of passengers on each deck originating from each planet).
+            - 'index': shows planet allocation (% of passengers from each planet placed on each deck).
+            - 'count': displays raw passenger counts [Default = "columns"].
+
+         figsize:tuple[float, float]
+          Size of the heatmap figure [Default = (12, 6)].
+
+        Returns
+        -------
+         None
+        '''
+
+        temp_df = self.df.copy()
+        valid_df = temp_df.dropna(subset = ["HomePlanet", "Cabin_Deck"])
+
+        if normalize in ["columns", "index"]:
+
+            crosstab = pd.crosstab(valid_df["HomePlanet"], valid_df["Cabin_Deck"], normalize = normalize)
+            existing_decks = [d for d in self.DECK_ORDER if d in crosstab.columns]
+            crosstab = crosstab.reindex(columns = existing_decks).fillna(0) * 100
+            fmt = ".1f"
+            cbar_label = "% of Deck" if normalize == "columns" else "% of HomePlanet"
+            title = "Deck Composition by HomePlanet (% of Each Deck)" if normalize == "columns" else "Planet Allocation across Cabin Decks (% of Each Planet)"
+            cmap = "Blues" if normalize == "columns" else "Purples"
+
+        elif normalize in ["count", "none"]:
+
+            crosstab = pd.crosstab(valid_df["HomePlanet"], valid_df["Cabin_Deck"])
+            existing_decks = [d for d in self.DECK_ORDER if d in crosstab.columns]
+            crosstab = crosstab.reindex(columns = existing_decks).fillna(0)
+            fmt = "d"
+            cbar_label = "Passenger Count"
+            title = "Passenger Count by HomePlanet and Cabin Deck"
+            cmap = "YlGnBu"
+
+        else:
+            
+            raise ValueError(f"Invalid normalize option '{normalize}'. Choose from 'columns', 'index', or 'count'.")
+
+        plt.figure(figsize = figsize)
+        sns.heatmap(crosstab, annot = True, fmt = fmt, cmap = cmap, cbar_kws = {"label": cbar_label}, linewidths = 0.5)
+        plt.title(title)
+        plt.xlabel("Cabin Deck (Top / Luxury -> Lower / Economy)")
+        plt.ylabel("HomePlanet")
+        plt.tight_layout()
+        plt.show()
