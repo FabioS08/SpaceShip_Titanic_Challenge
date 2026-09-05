@@ -1,9 +1,12 @@
 from sklearn.preprocessing import StandardScaler
 from matplotlib.container import BarContainer
-from matplotlib.patches import Patch
 from sklearn.decomposition import PCA
+from matplotlib.figure import Figure
+from matplotlib.patches import Patch
 from sklearn.manifold import TSNE
 import plotly.graph_objects as go
+from matplotlib.axes import Axes
+from typing import cast, Literal
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -58,14 +61,14 @@ class DatasetVisualizer:
 
 
     @staticmethod
-    def _add_bar_labels(ax: plt.Axes, fmt: str | None = None, padding: int = 3, fontsize: int = 9) -> None:
+    def _add_bar_labels(ax: Axes, fmt: str | None = None, padding: int = 3, fontsize: int = 9) -> None:
 
         '''
         It adds text labels to all BarContainers in a given matplotlib Axes.
 
         Parameters
         ----------
-         ax:plt.Axes
+         ax:Axes
           The matplotlib Axes object containing bar containers.
 
          fmt:str | None
@@ -183,7 +186,7 @@ class DatasetVisualizer:
 
 
     def _create_dynamic_subplots(self, n_items: int, n_cols: int = 2, col_width: float = 8.0, row_height: float = 4.5,
-                                 figsize: tuple[float, float] | None = None) -> tuple[plt.Figure, np.ndarray]:
+                                 figsize: tuple[float, float] | None = None) -> tuple[Figure, np.ndarray]:
             
             '''
             It creates a dynamic grid of subplots based on the number of items.
@@ -207,7 +210,7 @@ class DatasetVisualizer:
             
             Returns
             -------
-             tuple[plt.Figure, np.ndarray]
+             tuple[Figure, np.ndarray]
               A tuple containing the figure and the axes
             '''
             
@@ -598,7 +601,7 @@ class DatasetVisualizer:
         '''
 
         reducer = PCA(n_components = 3, random_state = random_state)
-        coords = reducer.fit_transform(X)
+        coords = cast(np.ndarray, np.asarray(reducer.fit_transform(X)))
         ev = reducer.explained_variance_ratio_ * 100
         dim_labels = [f"PC1 ({ev[0]:.1f}%)", f"PC2 ({ev[1]:.1f}%)", f"PC3 ({ev[2]:.1f}%)"]
         title = f"3D PCA Projection by Transported Status\n(Total Explained Variance: {ev.sum():.1f}%, N={len(X):,})"
@@ -639,7 +642,7 @@ class DatasetVisualizer:
         '''
 
         reducer = TSNE(n_components = 3, perplexity = perplexity, random_state = random_state, init = "pca", learning_rate = "auto", max_iter = max_iter)
-        coords = reducer.fit_transform(X)
+        coords = cast(np.ndarray, np.asarray(reducer.fit_transform(X)))
         dim_labels = ["t-SNE 1", "t-SNE 2", "t-SNE 3"]
         title = f"3D t-SNE Manifold Projection by Transported Status (N={len(X):,})"
 
@@ -673,7 +676,7 @@ class DatasetVisualizer:
         '''
 
         reducer = umap.UMAP(n_components = 3, random_state = random_state, n_jobs = 1)
-        coords = reducer.fit_transform(X)
+        coords = cast(np.ndarray, np.asarray(reducer.fit_transform(X)))
         dim_labels = ["UMAP 1", "UMAP 2", "UMAP 3"]
         title = f"3D UMAP Projection by Transported Status (N={len(X):,})"
 
@@ -821,14 +824,14 @@ class DatasetVisualizer:
         self._plot_3d_scatter(coords = coords, y = y, dim_labels = dim_labels, title = title, width = width, height = height, alpha = alpha, s = s)
 
 
-    def _plot_planetary_deck_composition(self, ax: plt.Axes, df: pd.DataFrame) -> None:
+    def _plot_planetary_deck_composition(self, ax: Axes, df: pd.DataFrame) -> None:
 
         '''
         It plots an annotated heatmap showing the percentage of each deck occupied by each HomePlanet.
 
         Parameters
         ----------
-         ax:plt.Axes
+         ax:Axes
           The matplotlib Axes on which to render the plot.
 
          df:pd.DataFrame
@@ -854,14 +857,14 @@ class DatasetVisualizer:
             ax.text(0.5, 0.5, "Cabin_Deck not found", ha = "center", va = "center")
 
 
-    def _plot_planetary_amenity_expenditure(self, ax: plt.Axes, df: pd.DataFrame, palette: dict[str, str]) -> None:
+    def _plot_planetary_amenity_expenditure(self, ax: Axes, df: pd.DataFrame, palette: dict[str, str]) -> None:
 
         '''
         It plots a grouped bar chart showing average expenditure per amenity by HomePlanet.
 
         Parameters
         ----------
-         ax:plt.Axes
+         ax:Axes
           The matplotlib Axes on which to render the plot.
 
          df:pd.DataFrame
@@ -886,14 +889,14 @@ class DatasetVisualizer:
         ax.legend(title = "HomePlanet", loc = "upper right")
 
 
-    def _plot_planetary_total_spend_and_vip(self, ax: plt.Axes, df: pd.DataFrame, palette: dict[str, str]) -> None:
+    def _plot_planetary_total_spend_and_vip(self, ax: Axes, df: pd.DataFrame, palette: dict[str, str]) -> None:
 
         '''
         It plots mean total spending per HomePlanet with overlaid VIP rate percentage annotations.
 
         Parameters
         ----------
-         ax:plt.Axes
+         ax:Axes
           The matplotlib Axes on which to render the plot.
 
          df:pd.DataFrame
@@ -918,20 +921,20 @@ class DatasetVisualizer:
         vip_rates = df.groupby("HomePlanet")["VIP"].apply(lambda s: (s == True).mean() * 100).to_dict()
         for i, planet in enumerate(total_spend_df["HomePlanet"]):
 
-            rate = vip_rates.get(planet, 0.0)
-            spend = total_spend_df.loc[total_spend_df["HomePlanet"] == planet, "Total_Spending"].values[0]
-            ax.text(i, spend * 0.5, f"VIP Rate:\n{rate:.1f}%", ha = "center", va = "center", color = "white", fontweight = "bold", fontsize = 9,
+            rate = float(vip_rates.get(planet, 0.0))
+            spend = float(total_spend_df.loc[total_spend_df["HomePlanet"] == planet, "Total_Spending"].iloc[0])
+            ax.text(float(i), spend * 0.5, f"VIP Rate:\n{rate:.1f}%", ha = "center", va = "center", color = "white", fontweight = "bold", fontsize = 9,
                     bbox = dict(boxstyle = "round,pad=0.3", facecolor = "black", alpha = 0.45))
 
 
-    def _plot_planetary_destination_distribution(self, ax: plt.Axes, df: pd.DataFrame, palette: dict[str, str]) -> None:
+    def _plot_planetary_destination_distribution(self, ax: Axes, df: pd.DataFrame, palette: dict[str, str]) -> None:
 
         '''
         It plots the destination percentage breakdown for each HomePlanet.
 
         Parameters
         ----------
-         ax:plt.Axes
+         ax:Axes
           The matplotlib Axes on which to render the plot.
 
          df:pd.DataFrame
@@ -1000,14 +1003,15 @@ class DatasetVisualizer:
         plt.show()
 
 
-    def visualize_planetary_deck_distribution(self, normalize: str = "columns", figsize: tuple[float, float] = (12, 6)) -> None:
+    def visualize_planetary_deck_distribution(self, normalize: Literal["columns", "index", "count"] = "columns", 
+                                              figsize: tuple[float, float] = (12, 6)) -> None:
 
         '''
         It generates an annotated heatmap showing the spatial distribution between HomePlanet and Cabin Decks.
 
         Parameters
         ----------
-         normalize:str
+         normalize:Literal["columns", "index", "count"]
           Normalization mode:
             - 'columns': shows deck composition (% of passengers on each deck originating from each planet).
             - 'index': shows planet allocation (% of passengers from each planet placed on each deck).
@@ -1026,7 +1030,7 @@ class DatasetVisualizer:
 
         if normalize in ["columns", "index"]:
 
-            crosstab = pd.crosstab(valid_df["HomePlanet"], valid_df["Cabin_Deck"], normalize = normalize)
+            crosstab = pd.crosstab(valid_df["HomePlanet"], valid_df["Cabin_Deck"], normalize = cast(Literal["columns", "index"], normalize))
             existing_decks = [d for d in self.DECK_ORDER if d in crosstab.columns]
             crosstab = crosstab.reindex(columns = existing_decks).fillna(0) * 100
             fmt = ".1f"
