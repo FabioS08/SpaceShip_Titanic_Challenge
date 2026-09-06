@@ -1,6 +1,7 @@
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
+from .constants import DEFAULT_EXCLUDE_COLS
 from typing import Any, Literal, cast
 import matplotlib.pyplot as plt
 from scipy import stats
@@ -24,7 +25,7 @@ class MissingValuesAnalyzer:
       Columns to exclude from statistical and predictive tests (e.g. high-cardinality IDs, text).
     '''
 
-    DEFAULT_EXCLUDE_COLS = ["PassengerId", "Name", "Cabin"]
+    DEFAULT_EXCLUDE_COLS = DEFAULT_EXCLUDE_COLS
 
     def __init__(self, df: pd.DataFrame, exclude_cols: list[str] | None = None):
         

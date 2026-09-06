@@ -1,3 +1,4 @@
+from .utils.constants import EXCLUDED_CATEGORICAL_COLS, SPENDING_COLS, CABIN_DECK_ORDER
 from sklearn.preprocessing import StandardScaler
 from matplotlib.container import BarContainer
 from sklearn.decomposition import PCA
@@ -27,13 +28,13 @@ plt.rcParams["axes.labelsize"] = 12
 class DatasetVisualizer:
 
     # Non-numeric columns excluded from categorical feature analysis (identifiers, high-cardinality text or target)
-    EXCLUDED_CATEGORICAL_COLS = ["PassengerId", "Name", "Cabin", "Transported"]
+    EXCLUDED_CATEGORICAL_COLS = EXCLUDED_CATEGORICAL_COLS
 
     # Spending features
-    SPENDING_COLS = ["RoomService", "FoodCourt", "ShoppingMall", "Spa", "VRDeck"]
+    SPENDING_COLS = SPENDING_COLS
 
     # Cabin deck order from top to bottom of ship
-    DECK_ORDER = ["A", "B", "C", "D", "E", "F", "G", "T"]
+    DECK_ORDER = CABIN_DECK_ORDER
 
     def __init__(self, df: pd.DataFrame):
         self.df = df 
