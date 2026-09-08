@@ -3,6 +3,7 @@ from .utils.constants import (TARGET_COL, CABIN_SPLIT_COLS, GROUP_SPLIT_COLS, HI
                               DEFAULT_SIMPLE_IMPUTE_COLS, DEFAULT_KNN_IMPUTE_COLS,
                               BOOL_COLS, INT_COLS, FLOAT_COLS, CAT_COLS, NOMINAL_CAT_COLS, ORDINAL_CAT_COLS,
                               CABIN_DECK_ORDER, CABIN_SIDE_ORDER, DEFAULT_ORDINAL_CATEGORIES)
+from .utils.dataset_presets import DATASET_PRESETS
 from sklearn.preprocessing import RobustScaler, OneHotEncoder, OrdinalEncoder
 from sklearn.impute import KNNImputer
 from typing import Any, Literal
@@ -10,7 +11,9 @@ from textwrap import dedent
 from pathlib import Path
 import pandas as pd
 import numpy as np
+import contextlib
 import kagglehub
+import io
 
 
 class SpaceShipDataset:
@@ -35,6 +38,7 @@ class SpaceShipDataset:
     CABIN_DECK_ORDER: list[str] = CABIN_DECK_ORDER
     CABIN_SIDE_ORDER: list[str] = CABIN_SIDE_ORDER
     DEFAULT_ORDINAL_CATEGORIES: dict[str, list[str]] = DEFAULT_ORDINAL_CATEGORIES
+    DATASET_PRESETS: dict[str, dict[str, Any]] = DATASET_PRESETS
 
     '''
     Class to load and preprocess the SpaceShip Titanic Dataset.
@@ -68,6 +72,318 @@ class SpaceShipDataset:
 
         if extended_features:
             self.preprocess_dataset()
+
+
+    @classmethod
+    def list_presets(cls) -> pd.DataFrame:
+
+        '''
+        Returns a formatted DataFrame of all available dataset presets and their preprocessing configurations.
+
+        Returns
+        -------
+         pd.DataFrame
+          Summary table containing preset names, descriptions, and feature/imputation settings.
+        '''
+
+        records = []
+        for name, cfg in cls.DATASET_PRESETS.items():
+
+            records.append({
+                                "Preset": name,
+                                "Description": cfg["description"],
+                                "Missing Strategy": cfg["missing_strategy"],
+                                "New Features": cfg.get("introduce_features", True),
+                                "Drop Amenities": cfg["drop_original_amenities"],
+                                "Has_Spent": cfg["include_has_spent"],
+                                "Is_Solo": cfg.get("include_is_solo", True),
+                                "Encoding Strategy": cfg["encoding_strategy"],
+                                "Scale Numeric": cfg["scale_numeric"],
+                            })
+
+        return pd.DataFrame(records)
+
+
+    @classmethod
+    def _resolve_preset_config(cls, preset: str) -> dict[str, Any]:
+
+        '''
+        Resolves pipeline configuration directly from a predefined preset.
+
+        Parameters
+        ----------
+         preset:str
+          Preset identifier key in DATASET_PRESETS.
+
+        Returns
+        -------
+         dict[str, Any]
+          Dictionary containing the preset configuration parameters.
+        '''
+
+        if preset not in cls.DATASET_PRESETS:
+            available = ", ".join([f"'{p}'" for p in cls.DATASET_PRESETS.keys()])
+            raise ValueError(f"Unknown preset '{preset}'. Available presets: {available}")
+
+        return cls.DATASET_PRESETS[preset]
+
+
+    @classmethod
+    def _resolve_custom_config(cls, missing_strategy: Literal["impute", "drop"] | None = None,
+                               introduce_features: bool | None = None, drop_original_amenities: bool | None = None,
+                               include_has_spent: bool | None = None, include_is_solo: bool | None = None,
+                               encoding_strategy: Literal["auto", "onehot", "ordinal"] | None = None,
+                               scale_numeric: bool | None = None) -> dict[str, Any]:
+
+        '''
+        Resolves custom pipeline configuration applying baseline defaults.
+
+        Parameters
+        ----------
+         missing_strategy:Literal['impute', 'drop'] | None
+          Missing value resolution strategy [Default = 'impute'].
+
+         introduce_features:bool | None
+          Whether to introduce aggregated spending features [Default = True].
+
+         drop_original_amenities:bool | None
+          Whether to drop individual amenity features [Default = False].
+
+         include_has_spent:bool | None
+          Whether to introduce the Has_Spent indicator [Default = True].
+
+         include_is_solo:bool | None
+          Whether to retain the Is_Solo indicator (when False, only Group_Size is retained to avoid multicollinearity) [Default = True].
+
+         encoding_strategy:Literal['auto', 'onehot', 'ordinal'] | None
+          Categorical encoding strategy [Default = 'auto'].
+
+         scale_numeric:bool | None
+          Whether to scale numeric features [Default = True].
+
+        Returns
+        -------
+         dict[str, Any]
+          Dictionary containing the resolved configuration parameters.
+        '''
+
+        return {
+                    "missing_strategy": missing_strategy if missing_strategy is not None else "impute",
+                    "introduce_features": introduce_features if introduce_features is not None else True,
+                    "drop_original_amenities": drop_original_amenities if drop_original_amenities is not None else False,
+                    "include_has_spent": include_has_spent if include_has_spent is not None else True,
+                    "include_is_solo": include_is_solo if include_is_solo is not None else True,
+                    "encoding_strategy": encoding_strategy if encoding_strategy is not None else "auto",
+                    "scale_numeric": scale_numeric if scale_numeric is not None else True,
+                    "description": "Custom configuration"
+                }
+
+
+    @classmethod
+    def _print_pipeline_configuration(cls, config: dict[str, Any], preset: str | None = None) -> None:
+
+        '''
+        Prints the pipeline configuration banner and selected options.
+
+        Parameters
+        ----------
+         config:dict[str, Any]
+          Resolved pipeline configuration dictionary.
+
+         preset:str | None
+          Preset identifier name, or None for custom configuration. [Default = None]
+
+        Returns
+        -------
+         None
+        '''
+
+        banner_title = f"🚀 SpaceShipDataset Pipeline: Preset '{preset}'" if preset else "🚀 SpaceShipDataset Pipeline: Custom Configuration"
+        print("\n" + "=" * 85)
+        print(banner_title)
+        if preset:
+            print(f"📋 Rationale: {config['description']}")
+        print("⚙️ Configuration:")
+        print(f"  • Missing Strategy:         {config['missing_strategy'].upper()}")
+        feat_items = [
+            f"[{'✓' if config['introduce_features'] else ' '}] Total_Spending",
+            f"[{'✓' if config['introduce_features'] and config['include_has_spent'] else ' '}] Has_Spent",
+            f"[{'✓' if config.get('include_is_solo', True) else ' '}] Is_Solo",
+        ]
+        print(f"  • Feature Engineering:      {', '.join(feat_items)}")
+        print(f"  • Original Amenities:       {'Dropped (Aggregated spending only)' if config['drop_original_amenities'] else 'Retained'}")
+        print(f"  • Categorical Encoding:     {config['encoding_strategy'].upper()}")
+        print(f"  • Numeric Scaling:          {'RobustScaler' if config['scale_numeric'] else 'Skipped (Unscaled)'}")
+        print("=" * 85 + "\n")
+
+
+    @classmethod
+    def _print_pipeline_summary(cls, ds: "SpaceShipDataset") -> None:
+
+        '''
+        Prints the dataset summary banner including shapes, null counts, and feature list.
+
+        Parameters
+        ----------
+         ds:SpaceShipDataset
+          Processed SpaceShipDataset instance.
+
+        Returns
+        -------
+         None
+        '''
+
+        features = [c for c in ds.train.columns if c != cls.TARGET_COL]
+        print("\n" + "=" * 85)
+        print("✅ Dataset Variant Ready:")
+        print(f"  • X_train: {ds.train.shape[0]:,} rows × {len(features)} features")
+        print(f"  • y_train: {ds.train.shape[0]:,} rows (Target: '{cls.TARGET_COL}')")
+        print(f"  • X_test:  {ds.test.shape[0]:,} rows × {len(ds.test.columns)} features")
+        print(f"  • Remaining Nulls: Train = {ds.train.isnull().sum().sum()} | Test = {ds.test.isnull().sum().sum()}")
+        print(f"  • Features ({len(features)}): {', '.join(features)}")
+        print("=" * 85 + "\n")
+
+
+    @classmethod
+    def _extract_xy(cls, ds: "SpaceShipDataset") -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
+
+        '''
+        Extracts training feature matrix, target vector, and test feature matrix from a SpaceShipDataset.
+
+        Parameters
+        ----------
+         ds:SpaceShipDataset
+          Processed SpaceShipDataset instance.
+
+        Returns
+        -------
+         tuple[pd.DataFrame, pd.Series, pd.DataFrame]
+          A tuple containing (X_train, y_train, X_test).
+        '''
+
+        X_train = ds.train.drop(columns = [cls.TARGET_COL])
+        y_train = ds.train[cls.TARGET_COL]
+        X_test = ds.test.copy()
+
+        return X_train, y_train, X_test
+
+
+    @classmethod
+    def _execute_pipeline(cls, dir: str, config: dict[str, Any]) -> "SpaceShipDataset":
+
+        '''
+        Instantiates a fresh SpaceShipDataset and executes the step-by-step preprocessing pipeline.
+
+        Parameters
+        ----------
+         dir:str
+          Directory where train.csv and test.csv are located.
+
+         config:dict[str, Any]
+          Resolved pipeline configuration dictionary.
+
+        Returns
+        -------
+         SpaceShipDataset
+          Processed SpaceShipDataset instance.
+        '''
+
+        ds = cls(dir = dir)
+
+        # Step 1: Missing values
+        ds.handle_missing_values(strategy = config["missing_strategy"])
+
+        # Step 2: High cardinality identifiers
+        ds.drop_high_cardinality_features()
+
+        # Step 3: New feature introduction
+        ds.new_feature_introduction(introduce_features = config["introduce_features"], drop_original_amenities = config["drop_original_amenities"],
+                                    include_has_spent = config["include_has_spent"])
+
+        # Step 4: Group features resolution (Group_Size vs Is_Solo)
+        ds.handle_group_features(include_is_solo = config.get("include_is_solo", True))
+
+        # Step 5: Enforce types
+        ds.handle_types()
+
+        # Step 6: Scaling & categorical encoding
+        numeric_cols: list[str] | None = None if config["scale_numeric"] else []
+        ds.scale_and_encode_features(numeric_cols = numeric_cols, encoding_strategy = config["encoding_strategy"])
+
+        return ds
+
+
+    @classmethod
+    def build(cls, preset: str | None = None, dir: str = "./", missing_strategy: Literal["impute", "drop"] | None = None, introduce_features: bool | None = None,
+              drop_original_amenities: bool | None = None, include_has_spent: bool | None = None, include_is_solo: bool | None = None,
+              encoding_strategy: Literal["auto", "onehot", "ordinal"] | None = None,
+              scale_numeric: bool | None = None, verbose: bool = True) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
+
+        '''
+        Factory method that instantiates a fresh SpaceShipDataset, executes the end-to-end preprocessing pipeline according 
+        to a designated preset (or custom configuration) and returns ready-to-train feature matrices and target vector.
+
+        Parameters
+        ----------
+         preset:str | None
+          Name of a predefined experimental preset. [Default = None]
+
+         dir:str
+          Directory where train.csv and test.csv are located [Default = './'].
+
+         missing_strategy:Literal['impute', 'drop'] | None
+          Strategy for resolving missing values when preset is None.
+
+         introduce_features:bool | None
+          Whether to introduce aggregated spending features (Total_Spending, Has_Spent) when preset is None.
+
+         drop_original_amenities:bool | None
+          Whether to drop individual amenity spending features after aggregation when preset is None.
+
+         include_has_spent:bool | None
+          Whether to introduce the binary Has_Spent indicator when preset is None.
+
+         include_is_solo:bool | None
+          Whether to retain the Is_Solo indicator (when False, only Group_Size is retained to avoid multicollinearity) when preset is None.
+
+         encoding_strategy:Literal['auto', 'onehot', 'ordinal'] | None
+          Categorical encoding strategy ('auto', 'onehot', or 'ordinal') when preset is None.
+
+         scale_numeric:bool | None
+          Whether to scale numerical features using RobustScaler when preset is None.
+
+         verbose:bool
+          Whether to print progress messages during pipeline execution [Default = True].
+
+        Returns
+        -------
+         tuple[pd.DataFrame, pd.Series, pd.DataFrame]
+          A tuple containing (X_train, y_train, X_test).
+        '''
+
+        # Resolve configuration from preset or custom parameters
+        if preset is not None:
+            config = cls._resolve_preset_config(preset = preset)
+
+        else:
+            config = cls._resolve_custom_config(missing_strategy = missing_strategy, introduce_features = introduce_features,
+                                                drop_original_amenities = drop_original_amenities, include_has_spent = include_has_spent,
+                                                include_is_solo = include_is_solo,
+                                                encoding_strategy = encoding_strategy, scale_numeric = scale_numeric)
+
+        # Run with or without stdout output
+        if verbose:
+
+            cls._print_pipeline_configuration(config = config, preset = preset)
+            ds = cls._execute_pipeline(dir = dir, config = config)
+            cls._print_pipeline_summary(ds = ds)
+
+        else:
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                ds = cls._execute_pipeline(dir = dir, config = config)            
+
+        return cls._extract_xy(ds = ds)
 
 
     def _check_dataset_existence(self) -> bool:
@@ -663,6 +979,11 @@ class SpaceShipDataset:
             dropped = train_before - train_after
             print(f"Dropped {dropped:,} rows with missing values from train ({train_before:,} -> {train_after:,}).")
 
+            # Impute remaining missing values in test set using train statistics (test rows cannot be dropped)
+            test_missing = [c for c in self.test.columns if self.test[c].isnull().sum() > 0]
+            if test_missing:
+                self._impute_simple(cols = test_missing)
+
         print(f"\nAfter {strategy}: Train Set Rows: {len(self.train):,} | Missing Values: {self.train.isnull().sum().sum():,}")
         print(f"            : Test Set Rows:  {len(self.test):,} | Missing Values: {self.test.isnull().sum().sum():,}")
 
@@ -700,7 +1021,7 @@ class SpaceShipDataset:
         print(f"Removed high-cardinality features from train and test sets: {', '.join(train_cols_to_drop)}")
 
 
-    def new_feature_introduction(self, drop_original_amenities: bool = False, include_has_spent: bool = True) -> None:
+    def new_feature_introduction(self, introduce_features: bool = True, drop_original_amenities: bool = False, include_has_spent: bool = True) -> None:
 
         '''
         Introduces aggregated spending features across both train and test sets:
@@ -711,6 +1032,9 @@ class SpaceShipDataset:
 
         Parameters
         ----------
+         introduce_features:bool
+          Whether to introduce aggregated spending features. When False, skips feature engineering [Default = True].
+
          drop_original_amenities:bool
           Whether to drop the individual spending features ('RoomService', 'FoodCourt', 'ShoppingMall', 'Spa', 'VRDeck') after aggregation [Default = False].
 
@@ -721,6 +1045,10 @@ class SpaceShipDataset:
         -------
          None
         '''
+
+        if not introduce_features:
+            print("Skipped new feature introduction (retained original individual amenities only).")
+            return
 
         spending_cols = self.SPENDING_COLS
 
@@ -739,6 +1067,30 @@ class SpaceShipDataset:
             self.train.drop(columns = spending_cols, inplace = True)
             self.test.drop(columns = spending_cols, inplace = True)
             print(f"Dropped original amenity features: {', '.join(spending_cols)}")
+
+
+    def handle_group_features(self, include_is_solo: bool = True) -> None:
+
+        '''
+        Resolves group-related features across train and test sets:
+        retains Group_Size and optionally drops Is_Solo to avoid multicollinearity.
+
+        Parameters
+        ----------
+         include_is_solo:bool
+          Whether to retain the binary Is_Solo feature. When False, drops Is_Solo from train and test sets [Default = True].
+
+        Returns
+        -------
+         None
+        '''
+
+        if not include_is_solo:
+            for df in (self.train, self.test):
+                if "Is_Solo" in df.columns:
+                    df.drop(columns = ["Is_Solo"], inplace = True)
+
+            print("Dropped redundant feature 'Is_Solo' (retained Group_Size only).")
 
 
     def handle_types(self, categorical_as_category: bool = False, custom_types: dict[str, Any] | None = None) -> None:
@@ -1083,6 +1435,8 @@ class SpaceShipDataset:
         print("Feature scaling and encoding complete:")
         if numeric_cols:
             print(f"  - Scaled with RobustScaler ({len(numeric_cols)} features): {', '.join(numeric_cols)}")
+        else:
+            print("  - Scaled with RobustScaler (0 features): Skipped (features left unscaled)")
         if onehot_cols:
             print(f"  - One-Hot Encoded ({len(onehot_cols)} features): {', '.join(onehot_cols)}")
         if ordinal_cols:
