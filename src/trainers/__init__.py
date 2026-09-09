@@ -1,6 +1,7 @@
 from .logistic_regression import LogisticRegressionTrainer
 from .gradient_boosting import GradientBoostingTrainer
 from .random_forest import RandomForestTrainer
+from .model_comparison import compare_trainers
 from .neural_net import NeuralNetTrainer
 from .catboost import CatBoostTrainer
 from .lightgbm import LightGBMTrainer
@@ -17,4 +18,5 @@ __all__ = [
                 "GradientBoostingTrainer",
                 "LogisticRegressionTrainer",
                 "NeuralNetTrainer",
+                "compare_trainers",
             ]

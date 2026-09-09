@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.metrics import log_loss, accuracy_score
 from .base import ModelTrainer

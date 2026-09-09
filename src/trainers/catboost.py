@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from sklearn.metrics import accuracy_score
 from catboost import CatBoostClassifier
 from .base import ModelTrainer

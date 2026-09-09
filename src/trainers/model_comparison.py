@@ -1,10 +1,6 @@
-from __future__ import annotations
-
-from typing import Any, TYPE_CHECKING
+from .base import ModelTrainer
+from typing import Any
 import pandas as pd
-
-if TYPE_CHECKING:
-    from ..trainers.base import ModelTrainer
 
 
 def resolve_trainer_thresholds(trainers: list[ModelTrainer], threshold: float | dict[str, float] | list[float] | tuple[float, ...] = 0.5) -> list[float]:
@@ -134,7 +130,7 @@ def print_leaderboard(df: pd.DataFrame) -> None:
     print("=" * w + "\n")
 
 
-def compare_trainers(trainers: list[ModelTrainer],  threshold: float | dict[str, float] | list[float] | tuple[float, ...] = 0.5,  
+def compare_trainers(trainers: list[ModelTrainer], threshold: float | dict[str, float] | list[float] | tuple[float, ...] = 0.5,  
                      sort_by: str = "Accuracy") -> pd.DataFrame:
     
     '''

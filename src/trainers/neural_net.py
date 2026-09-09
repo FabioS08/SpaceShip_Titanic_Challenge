@@ -173,8 +173,8 @@ class NeuralNetTrainer(ModelTrainer):
             Configured training DataLoader.
         '''
 
-        X_tr_t = torch.tensor(self.X_train.values, dtype = torch.float32)
-        y_tr_t = torch.tensor(self.y_train.values, dtype = torch.float32)
+        X_tr_t = torch.tensor(self.X_train.to_numpy(), dtype = torch.float32)
+        y_tr_t = torch.tensor(self.y_train.to_numpy(), dtype = torch.float32)
 
         return DataLoader(TensorDataset(X_tr_t, y_tr_t), batch_size = batch_size, shuffle = True)
 
@@ -193,8 +193,8 @@ class NeuralNetTrainer(ModelTrainer):
         if self.X_val.empty:
             return None
 
-        X_val_t = torch.tensor(self.X_val.values, dtype = torch.float32).to(self.device)
-        y_val_np = self.y_val.values
+        X_val_t = torch.tensor(self.X_val.to_numpy(), dtype = torch.float32).to(self.device)
+        y_val_np = self.y_val.to_numpy()
 
         return X_val_t, y_val_np
 
@@ -359,7 +359,7 @@ class NeuralNetTrainer(ModelTrainer):
             raise RuntimeError("NeuralNetTrainer must be fitted before predict_proba().")
 
         self.nn_module.eval()
-        arr = X.values if hasattr(X, "values") else np.asarray(X)
+        arr = X.to_numpy() if isinstance(X, pd.DataFrame) else np.asarray(X)
         tensor_x = torch.tensor(arr, dtype = torch.float32).to(self.device)
 
         with torch.no_grad():
